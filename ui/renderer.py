@@ -17,24 +17,32 @@ class UIRenderer:
         return gradient
 
     def draw_modern_ui(self, overlay, cursor_x, cursor_y, scroll_pos, current_song, playlist_songs, is_clicking=False):
-        # Create gradient background
-        gradient_bg = self.create_gradient_background()
+        # Create gradient background that matches the overlay size
+        gradient_bg = np.zeros(overlay.shape, np.uint8)
+        for i in range(overlay.shape[0]):
+            value = int(18 + (i/overlay.shape[0])*10)
+            gradient_bg[i] = [value, value, value]
         overlay[:] = gradient_bg
 
         # Create and resize sidebar gradient
-        sidebar_gradient = self.create_gradient_background()
-        sidebar = sidebar_gradient[:, :SIDEBAR_WIDTH]
+        sidebar_gradient = np.zeros((overlay.shape[0], SIDEBAR_WIDTH, 3), np.uint8)
+        for i in range(overlay.shape[0]):
+            value = int(18 + (i/overlay.shape[0])*10)
+            sidebar_gradient[i] = [value, value, value]
         
         # Apply sidebar gradient
-        try:
-            overlay[:, :SIDEBAR_WIDTH] = sidebar
-        except ValueError as e:
-            print(f"Warning: Could not apply sidebar gradient. Frame size: {overlay.shape}, Sidebar size: {sidebar.shape}")
-            # Fallback: Use solid color for sidebar
-            overlay[:, :SIDEBAR_WIDTH] = BACKGROUND_COLOR
+        overlay[:, :SIDEBAR_WIDTH] = sidebar_gradient
         
         # Draw current time
         self._draw_current_time(overlay)
+
+        # Draw now playing at the top
+        if current_song and current_song.is_playing:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            now_playing_text = f"Now Playing: {current_song.title} - {current_song.artist}"
+            cv2.putText(overlay, now_playing_text, 
+                       (SIDEBAR_WIDTH + 50, TOP_BAR_HEIGHT//2 + 12),
+                       font, 1.0, ACCENT_COLOR, 2, cv2.LINE_AA)
         
         # Draw menu items
         self._draw_menu_items(overlay, cursor_x, cursor_y)
@@ -74,6 +82,27 @@ class UIRenderer:
             cv2.putText(overlay, item, (40, y_pos), font, 1.0, color, 2, cv2.LINE_AA)
 
     def _draw_current_song(self, overlay, current_song):
+        if current_song is None:
+            # Eğer çalan şarkı yoksa varsayılan bir mesaj göster
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            song_y = self.frame_height - 140
+
+            # Ana arka plan
+            cv2.rectangle(overlay, (10, song_y - 30), (SIDEBAR_WIDTH - 10, song_y + 70),
+                         SECONDARY_COLOR, -1)
+
+            # Başlık arka planı
+            cv2.rectangle(overlay, (10, song_y - 30), (SIDEBAR_WIDTH - 10, song_y + 5),
+                         (25, 25, 25), -1)
+
+            # Varsayılan mesaj
+            cv2.putText(overlay, "Şarkı seçilmedi", (25, song_y), 
+                        font, 0.9, TEXT_COLOR, 2, cv2.LINE_AA)
+            
+            cv2.putText(overlay, "Bir şarkı seçin", (25, song_y + 30), 
+                        font, 0.7, TEXT_COLOR_SECONDARY, 2, cv2.LINE_AA)
+            return
+
         font = cv2.FONT_HERSHEY_SIMPLEX
         song_y = self.frame_height - 140
 
@@ -107,6 +136,27 @@ class UIRenderer:
             cv2.rectangle(overlay, (25, progress_y), (25 + progress, progress_y + 3),
                          ACCENT_COLOR, -1)
 
+        # Kontrol butonları için ortak y pozisyonu
+        controls_y = song_y + 20
+
+        # Durdur butonu
+        pause_x = SIDEBAR_WIDTH - 120
+        cv2.rectangle(overlay, (pause_x - 45, controls_y - 25), (pause_x + 45, controls_y + 25),
+                     HOVER_COLOR if current_song.is_playing else (40, 40, 40), -1)
+        cv2.rectangle(overlay, (pause_x - 45, controls_y - 25), (pause_x + 45, controls_y + 25),
+                     ACCENT_COLOR, 2)
+        cv2.putText(overlay, "DURDUR", (pause_x - 40, controls_y + 8),
+                   font, 0.7, TEXT_COLOR, 2, cv2.LINE_AA)
+
+        # Devam et butonu
+        play_x = SIDEBAR_WIDTH - 35
+        cv2.rectangle(overlay, (play_x - 45, controls_y - 25), (play_x + 45, controls_y + 25),
+                     HOVER_COLOR if not current_song.is_playing else (40, 40, 40), -1)
+        cv2.rectangle(overlay, (play_x - 45, controls_y - 25), (play_x + 45, controls_y + 25),
+                     ACCENT_COLOR, 2)
+        cv2.putText(overlay, "DEVAM", (play_x - 35, controls_y + 8),
+                   font, 0.7, TEXT_COLOR, 2, cv2.LINE_AA)
+
     def _draw_playlist(self, overlay, cursor_x, cursor_y, scroll_pos, playlist_songs):
         font = cv2.FONT_HERSHEY_SIMPLEX
         content_x = SIDEBAR_WIDTH + CONTENT_PADDING
@@ -126,18 +176,57 @@ class UIRenderer:
             if item_y < TOP_BAR_HEIGHT or item_y > self.frame_height:
                 continue
                 
-            is_hovered = cursor_y is not None and item_y - 25 < cursor_y < item_y + 25
+            is_hovered = cursor_y is not None and item_y - 30 < cursor_y < item_y + 30
             if is_hovered:
                 cv2.rectangle(overlay, 
-                            (content_x - 20, item_y - 30),
-                            (self.frame_width - CONTENT_PADDING, item_y + 20),
+                            (content_x - 20, item_y - 35),
+                            (self.frame_width - CONTENT_PADDING, item_y + 35),
                             HOVER_COLOR, -1)
             
+            # Oynat butonu
+            play_x = content_x + 40
+            play_y = item_y
+            
+            # Oynat butonu arka planı (daire)
+            cv2.circle(overlay, (play_x, play_y), 35, 
+                      HOVER_COLOR if hasattr(song, 'is_playing') and song.is_playing else (40, 40, 40), -1)
+            cv2.circle(overlay, (play_x, play_y), 35, ACCENT_COLOR, 2)
+            
+            # Play ikonu (üçgen)
+            triangle_size = 25
+            pts = np.array([
+                [play_x - triangle_size//2, play_y - triangle_size],
+                [play_x - triangle_size//2, play_y + triangle_size],
+                [play_x + triangle_size, play_y]
+            ], np.int32)
+            cv2.fillPoly(overlay, [pts], TEXT_COLOR)
+
+            # Durdur butonu
+            pause_x = content_x + 130
+            pause_y = item_y
+            
+            # Durdur butonu arka planı (daire)
+            cv2.circle(overlay, (pause_x, pause_y), 35, 
+                      HOVER_COLOR if hasattr(song, 'is_playing') and song.is_playing else (40, 40, 40), -1)
+            cv2.circle(overlay, (pause_x, pause_y), 35, ACCENT_COLOR, 2)
+            
+            # Pause ikonu (iki dikey çizgi)
+            bar_width = 8
+            bar_height = 30
+            cv2.rectangle(overlay, 
+                         (pause_x - bar_width - 6, pause_y - bar_height//2),
+                         (pause_x - 6, pause_y + bar_height//2),
+                         TEXT_COLOR, -1)
+            cv2.rectangle(overlay, 
+                         (pause_x + 6, pause_y - bar_height//2),
+                         (pause_x + bar_width + 6, pause_y + bar_height//2),
+                         TEXT_COLOR, -1)
+            
             title_color = ACCENT_COLOR if is_hovered else TEXT_COLOR
-            cv2.putText(overlay, song.title, (content_x, item_y), 
+            cv2.putText(overlay, song.title, (content_x + 200, item_y), 
                        font, 1.0, title_color, 2, cv2.LINE_AA)
             
-            cv2.putText(overlay, song.artist, (content_x + 400, item_y),
+            cv2.putText(overlay, song.artist, (content_x + 650, item_y),
                        font, 0.9, TEXT_COLOR_SECONDARY, 2, cv2.LINE_AA)
             
             duration_x = self.frame_width - 120

@@ -8,9 +8,9 @@ class GestureDetector:
         self.mp_hands = mp.solutions.hands
         self.mp_draw = mp.solutions.drawing_utils
         self.hands = self.mp_hands.Hands(
-            min_detection_confidence=MIN_DETECTION_CONFIDENCE,
-            min_tracking_confidence=MIN_TRACKING_CONFIDENCE,
-            max_num_hands=MAX_NUM_HANDS
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+            max_num_hands=1
         )
 
     def process_frame(self, frame):
@@ -61,19 +61,36 @@ class GestureDetector:
         
         return False
 
+    def is_pinch_gesture(self, hand_landmark):
+        # İşaret ve başparmak uçlarının konumlarını al
+        thumb_tip = hand_landmark.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
+        index_tip = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
+        
+        # İki parmak arasındaki mesafeyi 2 boyutlu olarak hesapla (x ve y)
+        distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
+        
+        return distance < 0.039  # Örnek projeden alınan eşik değeri
+
+    def get_pinch_position(self, hand_landmark, frame_width, frame_height):
+        # İşaret parmağı ve başparmak uçlarının konumlarını al
+        thumb_tip = hand_landmark.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
+        index_tip = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
+        
+        # Pinch pozisyonunu iki parmağın ortası olarak hesapla
+        pinch_x = int((thumb_tip.x + index_tip.x) / 2 * frame_width)
+        pinch_y = int((thumb_tip.y + index_tip.y) / 2 * frame_height)
+        
+        # İki parmak arasındaki mesafeyi 2 boyutlu olarak hesapla
+        distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
+        
+        if distance < 0.039:  # Örnek projeden alınan eşik değeri
+            return pinch_x, pinch_y
+        return None, None
+
     def get_finger_cursor(self, hand_landmark, frame_width, frame_height):
         index_tip = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
-        index_pip = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_PIP]
-        index_mcp = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_MCP]
-        wrist = hand_landmark.landmark[self.mp_hands.HandLandmark.WRIST]
         
-        index_extended = self.is_finger_extended(hand_landmark, self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
-                                               self.mp_hands.HandLandmark.INDEX_FINGER_PIP)
-        pip_extended = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_PIP].y < \
-                      hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_MCP].y
-        
-        if index_extended and pip_extended and index_tip.y < wrist.y:
-            cursor_x = int((index_tip.x * 0.5 + index_pip.x * 0.3 + index_mcp.x * 0.2) * frame_width)
-            cursor_y = int((index_tip.y * 0.5 + index_pip.y * 0.3 + index_mcp.y * 0.2) * frame_height)
-            return cursor_x, cursor_y
-        return -1, -1 
+        # İmleci doğrudan işaret parmağı ucuna bağla
+        cursor_x = int(index_tip.x * frame_width)
+        cursor_y = int(index_tip.y * frame_height)
+        return cursor_x, cursor_y 
