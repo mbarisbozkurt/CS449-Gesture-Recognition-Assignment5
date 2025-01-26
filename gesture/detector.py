@@ -12,6 +12,10 @@ class GestureDetector:
             min_tracking_confidence=0.5,
             max_num_hands=1
         )
+        # İmleç yumuşatma için önceki pozisyonları sakla
+        self.prev_cursor_x = None
+        self.prev_cursor_y = None
+        self.smoothing_factor = 0.5  # Yumuşatma faktörü (0-1 arası)
 
     def process_frame(self, frame):
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -69,7 +73,7 @@ class GestureDetector:
         # İki parmak arasındaki mesafeyi 2 boyutlu olarak hesapla (x ve y)
         distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
         
-        return distance < 0.039  # Örnek projeden alınan eşik değeri
+        return distance < 0.045  # Daha rahat kullanım için threshold değeri artırıldı
 
     def get_pinch_position(self, hand_landmark, frame_width, frame_height):
         # İşaret parmağı ve başparmak uçlarının konumlarını al
@@ -83,14 +87,27 @@ class GestureDetector:
         # İki parmak arasındaki mesafeyi 2 boyutlu olarak hesapla
         distance = ((thumb_tip.x - index_tip.x) ** 2 + (thumb_tip.y - index_tip.y) ** 2) ** 0.5
         
-        if distance < 0.039:  # Örnek projeden alınan eşik değeri
+        if distance < 0.045:  # Daha rahat kullanım için threshold değeri artırıldı
             return pinch_x, pinch_y
         return None, None
 
     def get_finger_cursor(self, hand_landmark, frame_width, frame_height):
         index_tip = hand_landmark.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
         
-        # İmleci doğrudan işaret parmağı ucuna bağla
-        cursor_x = int(index_tip.x * frame_width)
-        cursor_y = int(index_tip.y * frame_height)
+        # Yeni pozisyonu hesapla
+        new_x = int(index_tip.x * frame_width)
+        new_y = int(index_tip.y * frame_height)
+        
+        # Eğer önceki pozisyon varsa yumuşatma uygula
+        if self.prev_cursor_x is not None and self.prev_cursor_y is not None:
+            cursor_x = int(self.prev_cursor_x + (new_x - self.prev_cursor_x) * self.smoothing_factor)
+            cursor_y = int(self.prev_cursor_y + (new_y - self.prev_cursor_y) * self.smoothing_factor)
+        else:
+            cursor_x = new_x
+            cursor_y = new_y
+        
+        # Yeni pozisyonu sakla
+        self.prev_cursor_x = cursor_x
+        self.prev_cursor_y = cursor_y
+        
         return cursor_x, cursor_y 

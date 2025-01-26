@@ -1,2 +1,6 @@
-pygame==2.5.2
-spotipy==2.23.0 
+python-dotenv
+spotipy
+opencv-python
+mediapipe
+pygame
+numpy 

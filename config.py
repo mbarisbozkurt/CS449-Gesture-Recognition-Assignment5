@@ -13,9 +13,9 @@ HOVER_COLOR = (47, 49, 54)           # Discord-like hover
 CURSOR_OUTLINE_COLOR = (255, 255, 255)  # White outline
 
 # UI Layout - Relative to screen width
-SIDEBAR_WIDTH = 300  # Fixed width for sidebar
+SIDEBAR_WIDTH = 220  # Fixed width for sidebar
 TOP_BAR_HEIGHT = 60
-CONTENT_PADDING = 40
+CONTENT_PADDING = 50  # Reduced padding to move content left
 SONG_ITEM_HEIGHT = 100
 MENU_ITEM_SPACING = 50
 

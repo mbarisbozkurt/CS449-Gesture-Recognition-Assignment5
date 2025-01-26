@@ -7,7 +7,7 @@ class UIRenderer:
     def __init__(self, frame_width, frame_height):
         self.frame_width = frame_width
         self.frame_height = frame_height
-        self.menu_items = ["Home", "Search", "Library", "Playlists", "Settings"]
+        self.menu_items = []
 
     def create_gradient_background(self):
         gradient = np.zeros((self.frame_height, self.frame_width, 3), np.uint8)
@@ -35,20 +35,33 @@ class UIRenderer:
         
         # Draw current time
         self._draw_current_time(overlay)
-
-        # Draw now playing at the top
-        if current_song and current_song.is_playing:
+        
+        # Draw Now Playing text at the top
+        if current_song:
             font = cv2.FONT_HERSHEY_SIMPLEX
-            now_playing_text = f"Now Playing: {current_song.title} - {current_song.artist}"
-            cv2.putText(overlay, now_playing_text, 
-                       (SIDEBAR_WIDTH + 50, TOP_BAR_HEIGHT//2 + 12),
-                       font, 1.0, ACCENT_COLOR, 2, cv2.LINE_AA)
+            if current_song.is_playing:
+                status_text = f"Now Playing: {current_song.title} - {current_song.artist}"
+            else:
+                status_text = f"Paused: {current_song.title} - {current_song.artist}"
+            
+            # Y pozisyonunu biraz yukarı al
+            text_y = TOP_BAR_HEIGHT//2 + 10
+            
+            # Siyah gölge efekti için önce siyah renkle yaz
+            cv2.putText(overlay, status_text,
+                       (SIDEBAR_WIDTH + CONTENT_PADDING + 2, text_y + 2),
+                       font, 1.0, (0, 0, 0), 3, cv2.LINE_AA)
+            
+            # Sonra ana metni yaz
+            cv2.putText(overlay, status_text,
+                       (SIDEBAR_WIDTH + CONTENT_PADDING, text_y),
+                       font, 1.0, ACCENT_COLOR if current_song.is_playing else TEXT_COLOR_SECONDARY, 2, cv2.LINE_AA)
         
         # Draw menu items
         self._draw_menu_items(overlay, cursor_x, cursor_y)
         
         # Draw current song info
-        self._draw_current_song(overlay, current_song)
+        self._draw_current_song(overlay, current_song, cursor_x, cursor_y)
         
         # Draw playlist
         self._draw_playlist(overlay, cursor_x, cursor_y, scroll_pos, playlist_songs)
@@ -81,7 +94,7 @@ class UIRenderer:
 
             cv2.putText(overlay, item, (40, y_pos), font, 1.0, color, 2, cv2.LINE_AA)
 
-    def _draw_current_song(self, overlay, current_song):
+    def _draw_current_song(self, overlay, current_song, cursor_x, cursor_y):
         if current_song is None:
             # Eğer çalan şarkı yoksa varsayılan bir mesaj göster
             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -139,19 +152,37 @@ class UIRenderer:
         # Kontrol butonları için ortak y pozisyonu
         controls_y = song_y + 20
 
-        # Durdur butonu
+        # Durdur butonu - hover alanını genişlet
         pause_x = SIDEBAR_WIDTH - 120
+        pause_hover_area = {
+            'x1': pause_x - 50,  # Biraz daha geniş hover alanı
+            'y1': controls_y - 30,  # Biraz daha yüksek hover alanı
+            'x2': pause_x + 50,
+            'y2': controls_y + 30
+        }
+        is_pause_hovered = (cursor_x >= pause_hover_area['x1'] and cursor_x <= pause_hover_area['x2'] and 
+                          cursor_y >= pause_hover_area['y1'] and cursor_y <= pause_hover_area['y2'])
+        
         cv2.rectangle(overlay, (pause_x - 45, controls_y - 25), (pause_x + 45, controls_y + 25),
-                     HOVER_COLOR if current_song.is_playing else (40, 40, 40), -1)
+                     HOVER_COLOR if current_song.is_playing and is_pause_hovered else (40, 40, 40), -1)
         cv2.rectangle(overlay, (pause_x - 45, controls_y - 25), (pause_x + 45, controls_y + 25),
                      ACCENT_COLOR, 2)
         cv2.putText(overlay, "DURDUR", (pause_x - 40, controls_y + 8),
                    font, 0.7, TEXT_COLOR, 2, cv2.LINE_AA)
 
-        # Devam et butonu
+        # Devam et butonu - hover alanını genişlet
         play_x = SIDEBAR_WIDTH - 35
+        play_hover_area = {
+            'x1': play_x - 50,  # Biraz daha geniş hover alanı
+            'y1': controls_y - 30,  # Biraz daha yüksek hover alanı
+            'x2': play_x + 50,
+            'y2': controls_y + 30
+        }
+        is_play_hovered = (cursor_x >= play_hover_area['x1'] and cursor_x <= play_hover_area['x2'] and 
+                         cursor_y >= play_hover_area['y1'] and cursor_y <= play_hover_area['y2'])
+        
         cv2.rectangle(overlay, (play_x - 45, controls_y - 25), (play_x + 45, controls_y + 25),
-                     HOVER_COLOR if not current_song.is_playing else (40, 40, 40), -1)
+                     HOVER_COLOR if not current_song.is_playing and is_play_hovered else (40, 40, 40), -1)
         cv2.rectangle(overlay, (play_x - 45, controls_y - 25), (play_x + 45, controls_y + 25),
                      ACCENT_COLOR, 2)
         cv2.putText(overlay, "DEVAM", (play_x - 35, controls_y + 8),
@@ -176,11 +207,11 @@ class UIRenderer:
             if item_y < TOP_BAR_HEIGHT or item_y > self.frame_height:
                 continue
                 
-            is_hovered = cursor_y is not None and item_y - 30 < cursor_y < item_y + 30
+            is_hovered = cursor_y is not None and item_y - 40 < cursor_y < item_y + 40
             if is_hovered:
                 cv2.rectangle(overlay, 
-                            (content_x - 20, item_y - 35),
-                            (self.frame_width - CONTENT_PADDING, item_y + 35),
+                            (content_x - 40, item_y - 45),
+                            (self.frame_width - CONTENT_PADDING, item_y + 45),
                             HOVER_COLOR, -1)
             
             # Oynat butonu

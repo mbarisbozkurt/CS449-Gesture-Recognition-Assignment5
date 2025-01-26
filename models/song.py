@@ -15,6 +15,13 @@ class Song:
     # Spotify API instance
     spotify = None
     
+    # Aktif şarkıyı takip etmek için statik değişken
+    active_song = None
+    
+    # Device ID önbelleği
+    _cached_device_id = None
+    _last_device_check = 0
+    
     @classmethod
     def initialize_spotify(cls, client_id, client_secret):
         cls.CLIENT_ID = client_id
@@ -27,7 +34,16 @@ class Song:
             redirect_uri=cls.REDIRECT_URI,
             scope="user-read-playback-state user-modify-playback-state"
         ))
-    
+        
+        # İlk device ID'yi önbelleğe al
+        try:
+            devices = cls.spotify.devices()
+            if devices['devices']:
+                cls._cached_device_id = devices['devices'][0]['id']
+                cls._last_device_check = pygame.time.get_ticks()
+        except Exception:
+            pass
+
     def __init__(self, title, artist, duration, spotify_uri=None, album=None, progress=0):
         self.title = title
         self.artist = artist
@@ -38,72 +54,92 @@ class Song:
         self.is_playing = False
 
     def play(self):
-        if self.spotify_uri and self.__class__.spotify:
-            try:
-                # Aktif cihazı kontrol et
+        if not self.spotify_uri or not self.__class__.spotify:
+            return False
+
+        try:
+            current_time = pygame.time.get_ticks()
+            
+            # Device ID'yi sadece 30 saniyede bir kontrol et
+            if (not self.__class__._cached_device_id or 
+                current_time - self.__class__._last_device_check > 30000):
                 devices = self.__class__.spotify.devices()
                 if devices['devices']:
-                    device_id = devices['devices'][0]['id']  # İlk aktif cihazı kullan
-                    try:
-                        # Önceki şarkıyı durdur
-                        if hasattr(self.__class__, 'current_playing_song') and self.__class__.current_playing_song:
-                            try:
-                                self.__class__.current_playing_song.is_playing = False
-                                self.__class__.spotify.pause_playback()  # Önceki şarkıyı durdur
-                            except:
-                                pass
-                        
-                        # Yeni şarkıyı çal
-                        self.__class__.spotify.start_playback(device_id=device_id, uris=[self.spotify_uri])
-                        self.is_playing = True
-                        self.__class__.current_playing_song = self
-                        print(f"Now playing: {self.title} by {self.artist}")
-                    except Exception as e:
-                        print(f"Şarkı çalınırken hata oluştu: {e}")
-                        self.is_playing = False
+                    self.__class__._cached_device_id = devices['devices'][0]['id']
+                    self.__class__._last_device_check = current_time
                 else:
-                    print("Aktif Spotify cihazı bulunamadı. Lütfen Spotify'ı bir cihazda açın.")
-            except Exception as e:
-                print(f"Spotify bağlantısında hata: {e}")
-                self.is_playing = False
+                    return False
+            
+            # Geçici olarak önceki aktif şarkıyı sakla
+            previous_song = self.__class__.active_song
+            
+            # Önce kendimizi aktif şarkı yap ve durumu güncelle
+            self.__class__.active_song = self
+            self.is_playing = True
+            
+            # Sonra şarkıyı çal
+            self.__class__.spotify.start_playback(
+                device_id=self.__class__._cached_device_id, 
+                uris=[self.spotify_uri]
+            )
+            
+            # En son önceki şarkıyı temizle
+            if previous_song and previous_song != self:
+                previous_song.is_playing = False
+                previous_song.progress = 0
+            
+            return True
+            
+        except Exception as e:
+            self.is_playing = False
+            self.__class__.active_song = None
+            if "Restriction violated" in str(e):
+                print("Spotify Premium gerekiyor veya başka bir cihazda çalıyor olabilir.")
+            else:
+                print(f"Spotify playback error: {e}")
+            return False
 
     def stop(self):
-        try:
-            if self.__class__.spotify:
-                try:
-                    self.__class__.spotify.pause_playback()
-                except:
-                    pass
+        if self.spotify_uri and self.__class__.spotify:
+            try:
+                self.__class__.spotify.pause_playback()
                 self.is_playing = False
-                if hasattr(self.__class__, 'current_playing_song'):
-                    self.__class__.current_playing_song = None
-        except Exception as e:
-            print(f"Şarkı durdurulurken hata oluştu: {e}")
-            self.is_playing = False
+                self.progress = 0
+                if self.__class__.active_song == self:
+                    self.__class__.active_song = None
+                return True
+            except Exception as e:
+                if "Restriction violated" in str(e):
+                    print("Spotify Premium gerekiyor veya başka bir cihazda çalıyor olabilir.")
+                return False
+        return False
 
     def pause(self):
-        try:
-            if self.__class__.spotify and self.is_playing:
-                try:
-                    self.__class__.spotify.pause_playback()
-                except:
-                    pass
+        if self.spotify_uri and self.__class__.spotify:
+            try:
+                self.__class__.spotify.pause_playback()
                 self.is_playing = False
-        except Exception as e:
-            print(f"Şarkı duraklatılırken hata oluştu: {e}")
-            self.is_playing = False
+                if self.__class__.active_song == self:
+                    self.__class__.active_song = None
+                return True
+            except Exception as e:
+                if "Restriction violated" in str(e):
+                    print("Spotify Premium gerekiyor veya başka bir cihazda çalıyor olabilir.")
+                return False
+        return False
 
     def unpause(self):
-        try:
-            if self.__class__.spotify and not self.is_playing:
-                try:
-                    self.__class__.spotify.start_playback()
-                except:
-                    pass
+        if self.spotify_uri and self.__class__.spotify:
+            try:
+                self.__class__.spotify.start_playback()
                 self.is_playing = True
-        except Exception as e:
-            print(f"Şarkı devam ettirilirken hata oluştu: {e}")
-            self.is_playing = False
+                self.__class__.active_song = self
+                return True
+            except Exception as e:
+                if "Restriction violated" in str(e):
+                    print("Spotify Premium gerekiyor veya başka bir cihazda çalıyor olabilir.")
+                return False
+        return False
 
     @staticmethod
     def search_songs(query, limit=10):
@@ -140,17 +176,41 @@ class Song:
 
     @staticmethod
     def get_playlist():
-        # Popüler şarkıları getir
+        playlist_data = [
+            {"title": "Sad but True", "artist": "Metallica", "album": "Metallica (The Black Album)"},
+            {"title": "Bir Derdim Var", "artist": "Mor ve Otesi", "album": "Dünya Yalan Söylüyor"},
+            {"title": "Kufi", "artist": "Duman", "album": "Duman I"},
+            {"title": "The Trooper", "artist": "Iron Maiden", "album": "Piece of Mind"},
+            {"title": "Don't Cry", "artist": "Guns N' Roses", "album": "Use Your Illusion I"}
+        ]
+        
+        playlist_songs = []
         if Song.spotify:
-            results = Song.spotify.search(q='year:2024', limit=10, type='track')
-            return [
-                Song(
-                    track['name'],
-                    track['artists'][0]['name'],
-                    str(int(track['duration_ms']/1000//60)) + ":" + str(int(track['duration_ms']/1000%60)).zfill(2),
-                    track['uri'],
-                    track['album']['name']
-                )
-                for track in results['tracks']['items']
-            ]
-        return [] 
+            for song_data in playlist_data:
+                # Her şarkı için arama yap
+                query = f"track:{song_data['title']} artist:{song_data['artist']}"
+                results = Song.spotify.search(q=query, limit=1, type='track')
+                
+                if results['tracks']['items']:
+                    track = results['tracks']['items'][0]
+                    song = Song(
+                        title=song_data['title'],
+                        artist=song_data['artist'],
+                        duration=str(int(track['duration_ms']/1000//60)) + ":" + str(int(track['duration_ms']/1000%60)).zfill(2),
+                        spotify_uri=track['uri'],
+                        album=song_data['album']
+                    )
+                    playlist_songs.append(song)
+                else:
+                    # Eğer şarkı bulunamazsa URI olmadan ekle
+                    song = Song(
+                        title=song_data['title'],
+                        artist=song_data['artist'],
+                        duration="0:00",
+                        spotify_uri=None,
+                        album=song_data['album']
+                    )
+                    playlist_songs.append(song)
+                    print(f"Şarkı bulunamadı: {song_data['title']} - {song_data['artist']}")
+        
+        return playlist_songs 

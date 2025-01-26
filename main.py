@@ -3,6 +3,9 @@ from config import *
 from gesture.detector import GestureDetector
 from ui.renderer import UIRenderer
 from models.song import Song
+import os
+from dotenv import load_dotenv
+import time
 
 def update_scroll_positions(cursor_y, prev_cursor_y, scroll_gesture_active, vertical_scroll_pos):
     if scroll_gesture_active and prev_cursor_y != -1 and cursor_y != -1:
@@ -41,21 +44,24 @@ def handle_interactions(cursor_x, cursor_y, menu_items, playlist_songs, vertical
             play_y = item_y
             if (play_x - 40 <= cursor_x <= play_x + 40 and 
                 play_y - 20 <= cursor_y <= play_y + 20):
-                print(f"Play clicked for: {song.title}")
                 try:
                     # Eğer aynı şarkı çalıyorsa hiçbir şey yapma
                     if current_song and current_song.title == song.title and current_song.is_playing:
                         return True, current_song
                     # Eğer aynı şarkı duraklatılmışsa devam ettir
                     elif current_song and current_song.title == song.title and not current_song.is_playing:
-                        current_song.unpause()
+                        if current_song.unpause():
+                            current_song.is_playing = True
                         return True, current_song
                     # Değilse yeni şarkı çal
                     else:
                         if current_song:
                             current_song.stop()
-                        song.play()
-                        return True, song
+                            current_song.is_playing = False
+                        if song.play():
+                            song.is_playing = True
+                            return True, song
+                        return True, current_song
                 except Exception as e:
                     print(f"Şarkı çalma hatası: {e}")
                     return True, current_song
@@ -65,10 +71,10 @@ def handle_interactions(cursor_x, cursor_y, menu_items, playlist_songs, vertical
             pause_y = item_y
             if (pause_x - 40 <= cursor_x <= pause_x + 40 and 
                 pause_y - 20 <= cursor_y <= pause_y + 20):
-                print(f"Pause clicked for: {song.title}")
                 try:
                     if current_song and current_song.title == song.title:
-                        current_song.pause()
+                        if current_song.pause():
+                            current_song.is_playing = False
                     return True, current_song
                 except Exception as e:
                     print(f"Şarkı durdurma hatası: {e}")
@@ -80,18 +86,22 @@ def handle_interactions(cursor_x, cursor_y, menu_items, playlist_songs, vertical
         return False, current_song
 
 def main():
-    # Spotify API bilgilerini ayarla
-    CLIENT_ID = "e13c91eec5c247bbb35658d7b1ef21d5"
-    CLIENT_SECRET = "12e2414d5e0344d4afeb406ca03e285d"
+    # Load environment variables
+    load_dotenv()
+    
+    # Spotify API bilgilerini çevresel değişkenlerden al
+    CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
+    CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
+    
+    if not CLIENT_ID or not CLIENT_SECRET:
+        print("Hata: Spotify API bilgileri bulunamadı. Lütfen .env dosyasını kontrol edin.")
+        return
     
     # Spotify API'sini başlat
     Song.initialize_spotify(CLIENT_ID, CLIENT_SECRET)
     
-    # Test için birkaç şarkı ara
-    songs = Song.search_songs("Metallica", limit=5)  # Metallica şarkıları
-    print("\nBulunan şarkılar:")
-    for song in songs:
-        print(f"Şarkı: {song.title} - Sanatçı: {song.artist}")
+    # Playlist'i yükle
+    playlist_songs = Song.get_playlist()
     
     # Renderer ve GestureDetector'ı başlat
     renderer = UIRenderer(CAMERA_WIDTH, CAMERA_HEIGHT)
@@ -108,8 +118,6 @@ def main():
     actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    print(f"Actual camera resolution: {actual_width}x{actual_height}")
-    
     # Create window
     cv2.namedWindow("Modern Music Player", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Modern Music Player", actual_width, actual_height)
@@ -117,11 +125,14 @@ def main():
 
     # Initialize components with actual resolution
     current_song = None  # Başlangıçta çalan şarkı yok
-    playlist_songs = songs  # Arama sonuçlarını playlist olarak kullan
 
     # Initialize state
     vertical_scroll_pos = 0
     prev_cursor_x, prev_cursor_y = -1, -1
+    
+    # Spotify durumu kontrolü için zamanlayıcı
+    last_spotify_check = 0
+    SPOTIFY_CHECK_INTERVAL = 1.0  # Her 1 saniyede bir kontrol et
 
     # Ana döngü
     try:
@@ -159,6 +170,20 @@ def main():
                 if scroll_gesture_active:
                     vertical_scroll_pos = update_scroll_positions(cursor_y, prev_cursor_y, 
                                                                scroll_gesture_active, vertical_scroll_pos)
+            
+            # Şarkı durumunu belirli aralıklarla güncelle
+            current_time = time.time()
+            if current_song and (current_time - last_spotify_check) >= SPOTIFY_CHECK_INTERVAL:
+                try:
+                    current_playback = Song.spotify.current_playback()
+                    if current_playback and current_playback['item']:
+                        current_song.is_playing = current_playback['is_playing']
+                        current_song.progress = current_playback['progress_ms'] / current_playback['item']['duration_ms']
+                    else:
+                        current_song.is_playing = False
+                except Exception as e:
+                    print(f"Spotify playback error: {e}")
+                last_spotify_check = current_time
             
             # Pinch (tıklama) kontrolü - imleçten bağımsız
             if pinch_x is not None and pinch_y is not None:
