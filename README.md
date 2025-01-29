@@ -50,9 +50,18 @@ python main.py
    - Two fingers up or down (index + middle): Scroll playlist
 
 3. Controls:
+
    - Play/Pause songs using the pinch gesture
    - Control playback through either the application or Spotify
    - Scroll through your playlist using two fingers up or down
+
+4. Default Playlist:
+   The application will search and play these songs from Spotify (they don't need to be in your library):
+   - Sad but True - Metallica (Album: Metallica (The Black Album))
+   - Bir Derdim Var - Mor ve Otesi (Album: Dünya Yalan Söylüyor)
+   - Kufi - Duman (Album: Duman I)
+   - The Trooper - Iron Maiden (Album: Piece of Mind)
+   - Don't Cry - Guns N' Roses (Album: Use Your Illusion I)
 
 ## Note
 
