@@ -21,39 +21,37 @@ def update_scroll_positions(cursor_y, prev_cursor_y, scroll_gesture_active, vert
 
 def handle_interactions(cursor_x, cursor_y, menu_items, playlist_songs, vertical_scroll_pos, current_song):
     try:
-        # Check menu items
-        menu_start_y = 120
-        for i, item in enumerate(menu_items):
-            y_pos = menu_start_y + i * MENU_ITEM_SPACING
-            if cursor_y is not None and abs(cursor_y - y_pos) < 20 and cursor_x < SIDEBAR_WIDTH:
-                print(f"Clicked: {item}")
-                return True, current_song
+        # Adjust cursor_x to be relative to the UI side
+        if cursor_x > CAMERA_WIDTH:
+            cursor_x = cursor_x - CAMERA_WIDTH
 
         # Check playlist items
         content_x = SIDEBAR_WIDTH + CONTENT_PADDING
-        content_y = TOP_BAR_HEIGHT + CONTENT_PADDING - int(vertical_scroll_pos)
+        content_y = TOP_BAR_HEIGHT + CONTENT_PADDING + 100 - int(vertical_scroll_pos)  # Yeni başlangıç pozisyonu
         
         for i, song in enumerate(playlist_songs):
-            item_y = content_y + 100 + i * SONG_ITEM_HEIGHT
+            item_y = content_y + 120 + i * SONG_ITEM_HEIGHT  # Yeni şarkı pozisyonu hesaplaması
             
             if item_y < TOP_BAR_HEIGHT or item_y > CAMERA_HEIGHT:
                 continue
             
-            # Oynat butonu kontrolü
-            play_x = content_x + 30
+            # Play button control - genişletilmiş ve düzeltilmiş tıklama alanı
+            play_x = content_x + 40
             play_y = item_y
-            if (play_x - 40 <= cursor_x <= play_x + 40 and 
-                play_y - 20 <= cursor_y <= play_y + 20):
+            play_hit_box = 45  # Tıklama alanını biraz daha genişlettik
+            
+            if (play_x - play_hit_box <= cursor_x <= play_x + play_hit_box and 
+                play_y - play_hit_box <= cursor_y <= play_y + play_hit_box):
                 try:
-                    # Eğer aynı şarkı çalıyorsa hiçbir şey yapma
+                    # If same song is playing, do nothing
                     if current_song and current_song.title == song.title and current_song.is_playing:
                         return True, current_song
-                    # Eğer aynı şarkı duraklatılmışsa devam ettir
+                    # If same song is paused, resume
                     elif current_song and current_song.title == song.title and not current_song.is_playing:
                         if current_song.unpause():
                             current_song.is_playing = True
                         return True, current_song
-                    # Değilse yeni şarkı çal
+                    # Otherwise play new song
                     else:
                         if current_song:
                             current_song.stop()
@@ -63,26 +61,28 @@ def handle_interactions(cursor_x, cursor_y, menu_items, playlist_songs, vertical
                             return True, song
                         return True, current_song
                 except Exception as e:
-                    print(f"Şarkı çalma hatası: {e}")
+                    print(f"Song playback error: {e}")
                     return True, current_song
 
-            # Durdur butonu kontrolü
+            # Pause button control - genişletilmiş ve düzeltilmiş tıklama alanı
             pause_x = content_x + 130
             pause_y = item_y
-            if (pause_x - 40 <= cursor_x <= pause_x + 40 and 
-                pause_y - 20 <= cursor_y <= pause_y + 20):
+            pause_hit_box = 45  # Tıklama alanını biraz daha genişlettik
+            
+            if (pause_x - pause_hit_box <= cursor_x <= pause_x + pause_hit_box and 
+                pause_y - pause_hit_box <= cursor_y <= pause_y + pause_hit_box):
                 try:
                     if current_song and current_song.title == song.title:
                         if current_song.pause():
                             current_song.is_playing = False
                     return True, current_song
                 except Exception as e:
-                    print(f"Şarkı durdurma hatası: {e}")
+                    print(f"Song pause error: {e}")
                     return True, current_song
         
         return False, current_song
     except Exception as e:
-        print(f"Etkileşim hatası: {e}")
+        print(f"Interaction error: {e}")
         return False, current_song
 
 def main():
@@ -118,9 +118,9 @@ def main():
     actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # Create window
+    # Create window with double width for split view
     cv2.namedWindow("Modern Music Player", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Modern Music Player", actual_width, actual_height)
+    cv2.resizeWindow("Modern Music Player", actual_width * 2, actual_height)
     fullscreen = False
 
     # Initialize components with actual resolution
@@ -153,17 +153,38 @@ def main():
                 hand_landmark = result.multi_hand_landmarks[0]
                 detector.draw_landmarks(frame, hand_landmark)
 
-                # İmleç pozisyonunu al
+                # Get cursor position from camera view (left side)
                 cursor_x, cursor_y = detector.get_finger_cursor(hand_landmark, actual_width, actual_height)
+                if cursor_x != -1 and cursor_y != -1:
+                    # Scale coordinates to match the UI dimensions
+                    cursor_x = int(cursor_x * (CAMERA_WIDTH / actual_width))
+                    cursor_y = int(cursor_y * (CAMERA_HEIGHT / actual_height))
+                    
+                    # Map the cursor from left side to right side
+                    ui_cursor_x = CAMERA_WIDTH + cursor_x  # Add CAMERA_WIDTH to move to right side
+                    
+                    # For UI interactions, use the mapped coordinates
+                    cursor_x = ui_cursor_x
                 
-                # Pinch pozisyonunu al (tıklama için)
+                # Get pinch position from camera view (left side)
                 pinch_x, pinch_y = detector.get_pinch_position(hand_landmark, actual_width, actual_height)
+                if pinch_x is not None and pinch_y is not None:
+                    # Scale coordinates to match the UI dimensions
+                    pinch_x = int(pinch_x * (CAMERA_WIDTH / actual_width))
+                    pinch_y = int(pinch_y * (CAMERA_HEIGHT / actual_height))
+                    
+                    # Map the pinch from left side to right side
+                    ui_pinch_x = CAMERA_WIDTH + pinch_x  # Add CAMERA_WIDTH to move to right side
+                    
+                    # For UI interactions, use the mapped coordinates
+                    pinch_x = ui_pinch_x
                 
-                # Scroll kontrolü
+                # Scroll gesture detection
                 scroll_gesture_active = detector.is_scroll_gesture(hand_landmark)
 
-            overlay = frame.copy()
-            is_clicking = False
+            # Draw the UI with both camera feed and interface
+            canvas = renderer.draw_modern_ui(frame, cursor_x, cursor_y, vertical_scroll_pos, 
+                                          current_song, playlist_songs, pinch_x is not None)
 
             # İmleç görüntüleme ve scroll işlemleri
             if cursor_x != -1 and cursor_y != -1:
@@ -187,16 +208,12 @@ def main():
             
             # Pinch (tıklama) kontrolü - imleçten bağımsız
             if pinch_x is not None and pinch_y is not None:
-                is_clicking = True
                 clicked, current_song = handle_interactions(pinch_x, pinch_y, renderer.menu_items, 
                                                          playlist_songs, vertical_scroll_pos, current_song)
-                
-            renderer.draw_modern_ui(overlay, cursor_x, cursor_y, vertical_scroll_pos, 
-                                     current_song, playlist_songs, is_clicking)
 
             prev_cursor_x, prev_cursor_y = cursor_x, cursor_y
 
-            cv2.imshow("Modern Music Player", overlay)
+            cv2.imshow("Modern Music Player", canvas)
             key = cv2.waitKey(1)
             if key == ord("q"):
                 break

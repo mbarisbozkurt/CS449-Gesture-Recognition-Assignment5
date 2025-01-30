@@ -4,13 +4,13 @@ CAMERA_HEIGHT = 1080
 
 # UI Colors
 BACKGROUND_COLOR = (12, 12, 12)      # Darker background
-ACCENT_COLOR = (88, 101, 242)        # Discord-like blue
-ACCENT_COLOR_HOVER = (71, 82, 196)   # Darker blue
-TEXT_COLOR = (255, 255, 255)         # Pure white
-TEXT_COLOR_SECONDARY = (185, 185, 185)  # Lighter gray
-SECONDARY_COLOR = (32, 34, 37)       # Discord-like dark
-HOVER_COLOR = (47, 49, 54)           # Discord-like hover
-CURSOR_OUTLINE_COLOR = (255, 255, 255)  # White outline
+ACCENT_COLOR = (70, 130, 180)        # Steel blue - daha yumuşak mavi
+ACCENT_COLOR_HOVER = (60, 110, 160)   # Darker steel blue
+TEXT_COLOR = (200, 200, 200)         # Daha yumuşak beyaz
+TEXT_COLOR_SECONDARY = (140, 140, 140)  # Daha yumuşak gri
+SECONDARY_COLOR = (25, 25, 25)       # Dark gray
+HOVER_COLOR = (65, 105, 155)        # Daha yumuşak hover rengi
+CURSOR_OUTLINE_COLOR = (220, 220, 220)  # Daha yumuşak beyaz
 
 # UI Layout - Relative to screen width
 SIDEBAR_WIDTH = 220  # Fixed width for sidebar
