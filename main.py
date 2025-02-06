@@ -142,7 +142,7 @@ def main():
                 break
 
             frame = cv2.flip(frame, 1)
-            result = detector.process_frame(frame)
+            result, processed_frame = detector.process_frame(frame)
 
             # Başlangıç değerlerini tanımla
             cursor_x, cursor_y = -1, -1
@@ -151,7 +151,7 @@ def main():
 
             if result.multi_hand_landmarks:
                 hand_landmark = result.multi_hand_landmarks[0]
-                detector.draw_landmarks(frame, hand_landmark)
+                detector.draw_landmarks(processed_frame, hand_landmark)
 
                 # Get cursor position from camera view (left side)
                 cursor_x, cursor_y = detector.get_finger_cursor(hand_landmark, actual_width, actual_height)
@@ -183,7 +183,7 @@ def main():
                 scroll_gesture_active = detector.is_scroll_gesture(hand_landmark)
 
             # Draw the UI with both camera feed and interface
-            canvas = renderer.draw_modern_ui(frame, cursor_x, cursor_y, vertical_scroll_pos, 
+            canvas = renderer.draw_modern_ui(processed_frame, cursor_x, cursor_y, vertical_scroll_pos, 
                                           current_song, playlist_songs, pinch_x is not None)
 
             # İmleç görüntüleme ve scroll işlemleri
